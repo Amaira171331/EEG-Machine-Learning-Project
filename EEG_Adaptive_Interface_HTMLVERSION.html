@@ -1,0 +1,1231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EEG Adaptive Reading Experiment</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Use Inter font -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0d1117; /* Dark background */
+            color: #c9d1d9; /* Light text */
+        }
+        /* The main content wrapper handles sizing, but the body now centers it. */
+        #start-page-container {
+             width: 100%;
+        }
+        
+        /* Custom class for the adaptive box to allow border transitions */
+        .adaptive-box {
+            border: 2px solid transparent;
+            transition: border-color 0.5s ease-in-out;
+        }
+        .stage-button {
+            transition: background-color 0.3s ease-in-out, transform 0.1s, box-shadow 0.3s;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+        }
+        .stage-button:hover {
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+        }
+        .stage-button:active {
+            transform: scale(0.98);
+        }
+
+        /* --- Focus-Adaptive STYLING (Simplified) --- */
+        /* Base reading passage style */
+        #reading-passage {
+            transition: all 0.5s ease-in-out;
+            line-height: 1.8; /* Ensure good readability */
+        }
+
+        /* Good Focus (A/B < 1.0) - Optimal state (Lower Contrast for Relaxed Reading) */
+        .focus-good {
+            border-color: #2dd4bf; /* Teal border on container */
+        }
+        .focus-good #reading-passage {
+            font-size: 1.125rem; /* text-lg */
+            color: #9ca3af; /* Gray text, noticeably lower contrast */
+        }
+
+        /* Bad Focus (A/B >= 1.0) - Intervention needed (Highest Contrast to Regain Attention) */
+        .focus-bad {
+            border-color: #f87171; /* Red border on container */
+        }
+        .focus-bad #reading-passage {
+            font-size: 1.375rem; /* text-2xl */
+            color: #ffffff; /* Pure white text */
+            text-shadow: 0 0 5px rgba(255, 255, 255, 0.7); /* Boost clarity */
+        }
+
+        /* --- MEMORY GRID STYLING --- */
+        .memory-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            width: 300px;
+            max-width: 100%;
+            margin: 20px auto;
+        }
+        .memory-square {
+            width: 100%;
+            padding-bottom: 100%; /* Makes squares responsive and square */
+            background-color: #1f2937;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s, border-color 0.2s, transform 0.1s;
+            border: 2px solid #374151;
+            position: relative; 
+        }
+        .memory-square.active {
+            background-color: #34d399; /* Green flash */
+        }
+        .memory-square.error {
+            background-color: #ef4444; /* Red flash */
+        }
+        .memory-square:hover {
+            border-color: #fcd34d;
+        }
+
+        /* --- RECOGNITION GRID STYLING --- */
+        .recognition-item {
+            cursor: pointer;
+            transition: transform 0.1s, border 0.3s, background-color 0.3s;
+            font-size: 1.2rem;
+        }
+        .recognition-item:hover {
+            transform: translateY(-2px);
+            background-color: #374151; /* Gray-700/800 */
+        }
+        .recognition-item.selected {
+            background-color: #10b981; /* Emerald-500 */
+            border-color: #34d399;
+            color: #1f2937;
+            font-weight: 600;
+            box-shadow: 0 0 15px rgba(16, 185, 129, 0.5);
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8 min-h-screen flex flex-col items-center justify-center">
+
+    <div class="max-w-7xl w-full"> <!-- Centered via body flex, acts as a max-width container -->
+        <header class="mb-8">
+            <h1 class="text-4xl font-extrabold text-teal-400 mb-2">Neuroadaptive Reading Experiment</h1>
+            <p class="text-gray-400">Comparing focus-based adaptive text to a control condition.</p>
+        </header>
+
+        <main class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+            <!-- Sidebar / Data Panel (Col 1) - Metrics always visible after start -->
+            <aside id="sidebar-metrics" class="space-y-6 bg-[#161b22] p-6 rounded-xl shadow-2xl h-fit lg:col-span-1 border border-gray-700" style="display: none;">
+                <h2 class="text-xl font-bold text-white mb-4">Real-Time Metrics</h2>
+
+                <div class="space-y-4">
+                    <!-- SESSION TYPE -->
+                    <div class="p-3 bg-white/5 rounded-lg shadow-inner">
+                        <h3 class="text-sm font-medium text-gray-400">SESSION TYPE</h3>
+                        <p id="session-type-display" class="text-xs font-semibold text-yellow-500 break-all">--</p>
+                    </div>
+
+                    <!-- CONNECTION STATUS -->
+                    <div class="p-3 bg-white/5 rounded-lg shadow-inner">
+                        <h3 class="text-sm font-medium text-gray-400">SIMULATION STATUS</h3>
+                        <p id="data-status-sidebar" class="text-sm font-semibold text-green-500">• Ready</p>
+                    </div>
+
+                    <!-- Alpha Absolute -->
+                    <div class="p-3 bg-white/5 rounded-lg shadow-inner">
+                        <h3 class="text-sm font-medium text-gray-400">Alpha Power (Relaxation)</h3>
+                        <p id="alpha-avg" class="text-2xl font-bold text-teal-300">--</p>
+                    </div>
+
+                    <!-- Beta Absolute -->
+                    <div class="p-3 bg-white/5 rounded-lg shadow-inner">
+                        <h3 class="text-sm font-medium text-gray-400">Beta Power (Concentration)</h3>
+                        <p id="beta-avg" class="text-2xl font-bold text-purple-300">--</p>
+                    </div>
+                    
+                    <!-- Alpha/Beta Ratio -->
+                    <div class="p-3 bg-white/5 rounded-lg shadow-inner">
+                        <h3 class="text-sm font-medium text-gray-400">A/B Ratio (Focus Indicator)</h3>
+                        <p id="ab-ratio" class="text-2xl font-bold text-yellow-300">--</p>
+                    </div>
+                </div>
+
+                <!-- Adaptations Log -->
+                <div class="bg-gray-700/10 p-4 rounded-lg shadow-inner">
+                    <h3 class="text-sm font-medium text-gray-400 mb-2">Intervention Log</h3>
+                    <ul id="log-list" class="space-y-1 h-32 overflow-y-auto text-xs text-gray-500">
+                        <!-- Logs will appear here -->
+                    </ul>
+                </div>
+            </aside>
+
+            <!-- Main Content Area (Col 2 & 3) -->
+            <section id="main-content" class="lg:col-span-2 space-y-6">
+
+                <!-- 1. START PAGE (Centered and Fixed) -->
+                <div id="start-page-container" class="flex flex-col items-center justify-center">
+                    <div id="start-page" class="page bg-[#161b22] p-10 rounded-xl shadow-2xl text-center max-w-xl border border-gray-700">
+                        <h2 class="text-3xl font-bold text-white mb-4">Select Your Session Type</h2>
+                        <p class="text-lg text-gray-400 mb-8">Test the adaptive interface against a standard (control) reading session.</p>
+                        
+                        <!-- Adaptive Group Button -->
+                        <button id="start-adaptive-button" class="stage-button w-full mb-4 bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 px-8 rounded-lg text-xl">
+                            Start With Adaptive Feedback
+                        </button>
+
+                        <!-- Control Group Button -->
+                        <button id="start-control-button" class="stage-button w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg text-xl">
+                            Start Without Adaptive Feedback (Control)
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 2. READING PAGE -->
+                <div id="reading-page" class="page" style="display: none;">
+                    <!-- Adaptive Visualization and Feedback Box -->
+                    <div id="visualization-box" class="adaptive-box bg-[#161b22] p-6 rounded-xl shadow-2xl transition duration-500 focus-good border border-gray-700">
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-xl font-bold text-white">Interface Status (<span id="current-session-type">Adaptive</span>)</h2>
+                            <p id="feedback-text" class="text-lg font-bold text-teal-300 transition duration-500">Good Focus Maintained</p>
+                        </div>
+                        <div class="h-1 bg-gray-700/50 rounded-full mb-4"></div>
+                        
+                        <!-- Simulated Reading Passage -->
+                        <article id="reading-passage" class="transition-all duration-500">
+                            <p class="mb-4">This was a time trial, he said—a one-mile time trial, four laps—not a race. It was meant to give an idea of where we stood, no more.</p>
+                            <p class="mb-4">We’d gathered around the middle of the long side of the track, just ten or twelve of us, including three others who seemed new like me, jogging back and forth in the wind, loosening up. The rest had walked over to the other side of the field.</p>
+                            <p class="mb-4">Falvo took me aside. “Warmed up? How’re the shoes?” “Fine.” In the distance I could see kids walking toward the parking lot. The sun stabbed out from under the clouds, glancing off the windshields.</p>
+                            <p class="mb-4">He raised his voice over the wind. “All right, I want you all to stay contained, stay smooth. I don’t want to see anybody draining the well today—that means you, Mr. McCann.” A tall, tough-looking kid with red hair and a tight face smiled like a gunslinger.</p>
+                            <p class="mb-4">He turned to me. “I don’t want you doing anything stupid, Mosher. Some of these boys have been at it for a while. Don’t think about them, think about yourself.” I shrugged. “Pace yourself. Let them do what they do. They’ll be about thirty yards ahead after the first lap. Don’t worry about them. Go out slow, feel your way, then bring it home as best you can. OK?” “Sure,” I said. “Remember, it’s a time trial. Not a race.”</p>
+                            <p class="mb-4">There was no starting gun. We lined up in the gusty wind, Falvo standing in the soggy infield in his dress shoes holding his clipboard like a small high table against his chest with his left hand and his stopwatch in his right and then he barked, “Runners . . . marks? Go!”</p>
+                            <p class="mb-4">They didn’t run, they flowed—the kid in the headband, the red-headed kid, and two or three others in particular—with a quiet, aggressive, sustained power that looked like nothing but felt like murder and I was with them and then halfway through the third turn they were moving away smooth as water and I could hear them talking among themselves, and I was slowing, burning, leaning back like there was a rope around my neck.</p>
+                            <p class="mb-4">“Too fast, Mosher, too fast,” I heard Falvo yelling, and his ax-sharp face came out of nowhere looking almost frantic and then it was gone and there was just the sound of my breathing and the crunch of my sneakers slapping the dirt. The group, still in a tight cluster, wasn’t all that far ahead of me.</p>
+                            <p class="mb-4">By the end of the second lap I heard someone far away yelling “Stop, Mosher, that’s enough,” and then at some point someone else calling “Coming through—inside,” and they passed me like a single mass, all business now, and I remember staggering after them, gasping, drowning, my chest, my legs, my throat filling with lead and looking up through a fog of pain just in time to see the kid with the headband, halfway down the backstretch, accelerating into a sustained, powerful sprint.</p>
+                            <p class="mb-4">I don’t know why. I can’t explain it. By the end of the third lap I was barely moving, clawing at the air, oblivious to everything except the dirt unfolding endlessly in front of me. “Let him go,” I heard somebody say. They’d all finished by then, recovered, and now stood watching as I staggered past them like something shot. “C’mon...”I heard someone start to call out uneasily, and then, “What’s his name?” A small crowd, I found out later,</p>
+                        </article>
+
+                        <button id="end-reading-button" class="stage-button mt-6 w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-8 rounded-lg text-lg">
+                            Finish Reading Passage & Start Recognition Test
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 3. RECOGNITION ENCODING PAGE (New Stage) -->
+                <div id="recognition-encoding-page" class="page bg-[#161b22] p-10 rounded-xl shadow-2xl text-center border border-gray-700" style="display: none;">
+                    <h2 class="text-3xl font-bold text-white mb-4">Phase 1: Memorization Task</h2>
+                    <p class="text-lg text-gray-400 mb-8">Pay close attention to the following 12 items. They will be displayed briefly.</p>
+                    
+                    <div id="encoding-display" class="w-full h-24 flex items-center justify-center bg-gray-900 rounded-lg mb-6">
+                        <p id="current-encoding-item" class="text-5xl font-extrabold text-teal-400">READY?</p>
+                    </div>
+
+                    <button id="start-encoding-button" class="stage-button mt-6 w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-8 rounded-lg text-lg">
+                        Start 12-Item Exposure
+                    </button>
+                </div>
+
+                <!-- 4. COMPREHENSION QUIZ PAGE -->
+                <div id="comprehension-page" class="page bg-[#161b22] p-10 rounded-xl shadow-2xl border border-gray-700" style="display: none;">
+                    <h2 class="text-3xl font-bold text-white mb-4 text-center">Reading Comprehension Quiz</h2>
+                    <p class="text-lg text-gray-400 mb-8 text-center">Test your understanding of the passage. Answer the questions below.</p>
+                    
+                    <form id="comprehension-quiz" class="space-y-6">
+                        <!-- Q1 -->
+                        <div class="bg-gray-800 p-4 rounded-lg shadow-inner">
+                            <p class="font-semibold text-gray-200 mb-3">1. What was the initial stated purpose of the run?</p>
+                            <div class="space-y-2 text-sm">
+                                <label class="block"><input type="radio" name="q1" value="B" class="mr-2"> A. A race for a scholarship</label>
+                                <label class="block"><input type="radio" name="q1" value="A" class="mr-2"> B. A one-mile time trial</label>
+                                <label class="block"><input type="radio" name="q1" value="C" class="mr-2"> C. A warm-up jog</label>
+                            </div>
+                        </div>
+                        <!-- Q2 -->
+                        <div class="bg-gray-800 p-4 rounded-lg shadow-inner">
+                            <p class="font-semibold text-gray-200 mb-3">2. How many laps was the time trial supposed to be?</p>
+                            <div class="space-y-2 text-sm">
+                                <label class="block"><input type="radio" name="q2" value="A" class="mr-2"> A. Two laps</label>
+                                <label class="block"><input type="radio" name="q2" value="B" class="mr-2"> B. Three laps</label>
+                                <label class="block"><input type="radio" name="q2" value="C" class="mr-2"> C. Four laps</label>
+                            </div>
+                        </div>
+                        <!-- Q3 -->
+                        <div class="bg-gray-800 p-4 rounded-lg shadow-inner">
+                            <p class="font-semibold text-gray-200 mb-3">3. What was Falvo's main advice to the narrator (Mosher)?</p>
+                            <div class="space-y-2 text-sm">
+                                <label class="block"><input type="radio" name="q3" value="A" class="mr-2"> A. Stay with the fast group at all costs</label>
+                                <label class="block"><input type="radio" name="q3" value="B" class="mr-2"> B. Go out slow and pace yourself</label>
+                                <label class="block"><input type="radio" name="q3" value="C" class="mr-2"> C. Accelerate during the second lap</label>
+                            </div>
+                        </div>
+                    </form>
+
+                    <!-- Added ID for event listener -->
+                    <button id="submit-quiz-button" class="stage-button mt-6 w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 px-8 rounded-lg text-lg">
+                        Submit Quiz & See Score
+                    </button>
+
+                    <!-- Score and Progress Bar Display -->
+                    <div id="quiz-results" class="mt-8 p-4 bg-gray-900 rounded-lg shadow-xl hidden border border-gray-700">
+                        <h3 class="text-xl font-bold text-white mb-3">Your Comprehension Score</h3>
+                        <div class="flex justify-between items-center mb-2">
+                            <p class="text-2xl font-extrabold text-yellow-400"><span id="final-score">0</span> / 3 Correct</p>
+                            <p class="text-sm text-gray-400">Retention Progress</p>
+                        </div>
+                        <div class="w-full bg-gray-700 rounded-full h-4">
+                            <div id="progress-bar" class="bg-green-500 h-4 rounded-full transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                        <!-- Added ID for event listener -->
+                        <button id="start-memory-button" class="stage-button mt-6 w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-8 rounded-lg text-lg">
+                            Continue to Spatial Memory Task
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 5. MEMORY TASK PAGE -->
+                <div id="memory-task-page" class="page bg-[#161b22] p-10 rounded-xl shadow-2xl text-center border border-gray-700" style="display: none;">
+                    <h2 class="text-3xl font-bold text-white mb-4">Phase 2: Spatial Working Memory Test</h2>
+                    <p class="text-lg text-gray-400 mb-4">Memorize the sequence of squares as they flash, then click them in the correct order.</p>
+                    <p class="text-xl font-bold text-teal-400 mb-4">Current Sequence Length: <span id="memory-level">1</span></p>
+                    <p id="memory-status" class="text-red-400 font-semibold mb-6">Watch the sequence!</p>
+                    <div id="memory-grid-container" class="flex justify-center">
+                        <div id="memory-grid" class="memory-grid">
+                            <div class="memory-square" data-index="0"></div>
+                            <div class="memory-square" data-index="1"></div>
+                            <div class="memory-square" data-index="2"></div>
+                            <div class="memory-square" data-index="3"></div>
+                            <div class="memory-square" data-index="4"></div>
+                            <div class="memory-square" data-index="5"></div>
+                            <div class="memory-square" data-index="6"></div>
+                            <div class="memory-square" data-index="7"></div>
+                            <div class="memory-square" data-index="8"></div>
+                        </div>
+                    </div>
+                    <button id="next-memory-button" class="stage-button mt-6 bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-3 px-8 rounded-lg text-lg">
+                        Begin Next Sequence
+                    </button>
+                    <p class="text-sm text-gray-500 mt-4">Memory Score: <span id="memory-score">0</span></p>
+                </div>
+
+                <!-- 6. RECOGNITION RETRIEVAL PAGE (New Stage) -->
+                <div id="recognition-retrieval-page" class="page bg-[#161b22] p-10 rounded-xl shadow-2xl text-center border border-gray-700" style="display: none;">
+                    <h2 class="text-3xl font-bold text-white mb-4">Phase 3: Item Recognition Test</h2>
+                    <p class="text-lg text-gray-400 mb-8">Select the 12 items you saw during the **Memorization Task** earlier in the session.</p>
+                    <p class="text-xl font-bold text-teal-400 mb-4">Selected: <span id="selected-count">0</span> / 12</p>
+
+                    <div id="recognition-grid" class="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 mb-6">
+                        <!-- Items will be populated here -->
+                    </div>
+
+                    <button id="submit-recognition-button" class="stage-button mt-6 w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 px-8 rounded-lg text-lg" disabled>
+                        Submit Recognition Score
+                    </button>
+                </div>
+
+
+                <!-- 7. SESSION SUMMARY PAGE -->
+                <div id="summary-page" class="page bg-[#161b22] p-10 rounded-xl shadow-2xl border border-gray-700" style="display: none;">
+                    <h2 class="text-3xl font-extrabold text-teal-400 mb-8 text-center">Session Summary & Results</h2>
+
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                        <div class="p-4 bg-gray-800 rounded-lg shadow-inner border border-yellow-400/50">
+                            <h3 class="text-lg font-bold text-white mb-1">Focus Metrics</h3>
+                            <p class="text-sm text-gray-400">Type: <span id="summary-type" class="font-semibold text-yellow-400"></span></p>
+                            <p class="text-sm text-gray-400">Avg A/B Ratio:</p>
+                            <p class="text-xl font-bold text-yellow-300"><span id="summary-avg-ratio">--</span></p>
+                            <p class="text-sm text-gray-400 adaptive-only">Interventions: <span id="summary-interventions" class="font-semibold text-red-400"></span></p>
+                        </div>
+                        <div class="p-4 bg-gray-800 rounded-lg shadow-inner border border-teal-400/50">
+                            <h3 class="text-lg font-bold text-white mb-1">Comprehension</h3>
+                            <p class="text-sm text-gray-400">Quiz Score:</p>
+                            <p class="text-2xl font-bold text-teal-300"><span id="summary-quiz"></span></p>
+                        </div>
+                        <div class="p-4 bg-gray-800 rounded-lg shadow-inner border border-purple-400/50">
+                            <h3 class="text-lg font-bold text-white mb-1">Spatial Memory</h3>
+                            <p class="text-sm text-gray-400">Max Level Reached:</p>
+                            <p class="text-2xl font-bold text-purple-300"><span id="summary-memory"></span></p>
+                        </div>
+                        <div class="p-4 bg-gray-800 rounded-lg shadow-inner border border-green-400/50">
+                            <h3 class="text-lg font-bold text-white mb-1">Item Recognition</h3>
+                            <p class="text-sm text-gray-400">Hits (Seen/12): <span id="summary-recognition-hits" class="font-semibold text-green-300"></span></p>
+                            <p class="text-sm text-gray-400">False Alarms (New/12): <span id="summary-recognition-fa" class="font-semibold text-red-400"></span></p>
+                            <p class="text-2xl font-bold text-green-300"><span id="summary-recognition">--</span></p>
+                        </div>
+                    </div>
+
+                    <h3 class="text-2xl font-bold text-white mb-4 border-b border-gray-700 pb-2">Past Session History</h3>
+                    <div id="past-sessions" class="bg-gray-900/50 p-4 rounded-lg space-y-3 max-h-64 overflow-y-auto text-sm border border-gray-800 mb-6">
+                        <p class="text-gray-500">Loading history...</p>
+                    </div>
+
+                    <div class="flex flex-col md:flex-row gap-4">
+                        <button id="export-csv-button" class="stage-button w-full md:w-1/2 bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-3 px-8 rounded-lg text-lg">
+                            Export All Sessions to CSV
+                        </button>
+                        <button id="finish-session-button" class="stage-button w-full md:w-1/2 bg-pink-600 hover:bg-pink-700 text-white font-bold py-3 px-8 rounded-lg text-lg">
+                            Finish Session & Clear All Data
+                        </button>
+                    </div>
+                </div>
+                
+            </section>
+        </main>
+    </div>
+
+<!-- All application logic in a single script -->
+<script>
+    // --- Global State and Constants ---
+    let eegSimulationInterval = null;
+    let currentStage = 'start'; 
+    let lastLogTime = 0;
+    let sessionLog = []; 
+    let abRatioHistory = []; // New: Stores A/B ratios for average calculation
+    let finalQuizScore = 0;
+    let finalMemoryScore = 0;
+    let finalRecognitionHits = 0; // New: Hits
+    let finalRecognitionFA = 0; // New: False Alarms
+    let isAdaptiveSession = true; 
+    let interventionCount = 0;
+    let preInterventionRatio = null; // New: Tracks ratio when focus is lost
+
+    const UPDATE_INTERVAL_MS = 1000; 
+    const LOG_COOLDOWN_MS = 5000; 
+    const ENCODING_ITEM_DURATION_MS = 1000; // 1 second display time
+    const BAD_FOCUS_THRESHOLD = 1.0; // Simplified threshold: A/B >= 1.0 is Bad Focus
+
+    // Simulated Initial EEG Data
+    let alphaPower = 0.9; 
+    let betaPower = 1.0; 
+
+    // Memory Task State
+    let memorySequence = [];
+    let playerInputSequence = [];
+    let currentMemoryLevel = 1;
+    let isFlashing = false;
+    let isListening = false;
+    
+    // Recognition Task Items (12 seen + 12 new = 24 total)
+    const ALL_ITEMS_MASTER = [
+        { id: 1, word: 'Chair', emoji: '🪑' }, { id: 2, word: 'Cloud', emoji: '☁️' }, { id: 3, word: 'Rocket', emoji: '🚀' }, 
+        { id: 4, word: 'Mushroom', emoji: '🍄' }, { id: 5, word: 'Book', emoji: '📚' }, { id: 6, word: 'Lemon', emoji: '🍋' }, 
+        { id: 7, word: 'Glove', emoji: '🧤' }, { id: 8, word: 'Star', emoji: '⭐' }, { id: 9, word: 'Hat', emoji: '🎩' }, 
+        { id: 10, word: 'Anchor', emoji: '⚓' }, { id: 11, word: 'Key', emoji: '🔑' }, { id: 12, word: 'Clock', emoji: '⏰' }, 
+        { id: 13, word: 'Castle', emoji: '🏰' }, { id: 14, word: 'Train', emoji: '🚂' }, { id: 15, word: 'Diamond', emoji: '💎' }, 
+        { id: 16, word: 'Snail', emoji: '🐌' }, { id: 17, word: 'Telescope', emoji: '🔭' }, { id: 18, word: 'Volcano', emoji: '🌋' }, 
+        { id: 19, word: 'Snowflake', emoji: '❄️' }, { id: 20, word: 'Camera', emoji: '📸' }, { id: 21, word: 'Mask', emoji: '🎭' }, 
+        { id: 22, word: 'Globe', emoji: '🌎' }, { id: 23, word: 'Trophy', emoji: '🏆' }, { id: 24, word: 'Paint', emoji: '🎨' } 
+    ];
+    // The first 12 items are the ones the user will see in the encoding phase.
+    const SEEN_ITEM_IDS = ALL_ITEMS_MASTER.slice(0, 12).map(item => item.id);
+    const NEW_ITEM_IDS = ALL_ITEMS_MASTER.slice(12).map(item => item.id); // For clarity in scoring
+    let selectedRecognitionIds = new Set(); // Stores the IDs of items the user selects
+
+    // Correct answers for the quiz
+    const CORRECT_ANSWERS = {
+        q1: 'A', // The run was a one-mile time trial (value='A')
+        q2: 'C', // Four laps (value='C')
+        q3: 'B'  // Go out slow and pace yourself (value='B')
+    };
+
+    // --- DOM Elements ---
+    const pages = {
+        start: document.getElementById('start-page-container'),
+        reading: document.getElementById('reading-page'),
+        encoding: document.getElementById('recognition-encoding-page'), // New
+        comprehension: document.getElementById('comprehension-page'),
+        memory: document.getElementById('memory-task-page'),
+        retrieval: document.getElementById('recognition-retrieval-page'), // New
+        summary: document.getElementById('summary-page')
+    };
+    const sidebar = document.getElementById('sidebar-metrics');
+    const statusSidebar = document.getElementById('data-status-sidebar');
+    const sessionTypeDisplayEl = document.getElementById('session-type-display');
+    const currentSessionTypeEl = document.getElementById('current-session-type');
+    const alphaEl = document.getElementById('alpha-avg');
+    const betaEl = document.getElementById('beta-avg');
+    const ratioEl = document.getElementById('ab-ratio');
+    const feedbackTextEl = document.getElementById('feedback-text');
+    const visualizationBox = document.getElementById('visualization-box');
+    const readingPassageEl = document.getElementById('reading-passage');
+    const logList = document.getElementById('log-list');
+    const quizResultsEl = document.getElementById('quiz-results');
+    const finalScoreEl = document.getElementById('final-score');
+    const progressBarEl = document.getElementById('progress-bar');
+    const memoryGrid = document.getElementById('memory-grid');
+    const memoryLevelEl = document.getElementById('memory-level');
+    const memoryStatusEl = document.getElementById('memory-status');
+    const memoryScoreEl = document.getElementById('memory-score');
+    const encodingDisplayEl = document.getElementById('current-encoding-item');
+    const recognitionGrid = document.getElementById('recognition-grid');
+    const selectedCountEl = document.getElementById('selected-count');
+    
+    // Declare and retrieve button elements
+    const endReadingButton = document.getElementById('end-reading-button');
+    const startEncodingButton = document.getElementById('start-encoding-button');
+    const submitQuizButton = document.getElementById('submit-quiz-button');
+    const startMemoryButton = document.getElementById('start-memory-button');
+    const nextMemoryButton = document.getElementById('next-memory-button');
+    const submitRecognitionButton = document.getElementById('submit-recognition-button');
+    const finishSessionButton = document.getElementById('finish-session-button');
+    const exportCsvButton = document.getElementById('export-csv-button'); // New export button
+
+    const summaryTypeEl = document.getElementById('summary-type');
+    const summaryAvgRatioEl = document.getElementById('summary-avg-ratio'); // New
+    const summaryQuizEl = document.getElementById('summary-quiz');
+    const summaryMemoryEl = document.getElementById('summary-memory');
+    const summaryRecognitionEl = document.getElementById('summary-recognition');
+    const summaryInterventionsEl = document.getElementById('summary-interventions');
+    const summaryRecognitionHitsEl = document.getElementById('summary-recognition-hits'); // New
+    const summaryRecognitionFAEl = document.getElementById('summary-recognition-fa'); // New
+
+
+    // --- Helper Functions ---
+
+    /**
+     * Switches the view between application stages.
+     */
+    function switchStage(stage) {
+        currentStage = stage;
+        Object.keys(pages).forEach(key => {
+            // Use 'flex' only for the start page (which has centering classes on its container)
+            // and 'block' for all other pages to allow normal vertical flow of content.
+            const displayStyle = (key === stage) 
+                ? (key === 'start' ? 'flex' : 'block') 
+                : 'none';
+            pages[key].style.display = displayStyle;
+        });
+
+        // Show sidebar for all task stages
+        sidebar.style.display = (stage !== 'start') ? 'block' : 'none';
+        
+        // Hide adaptive-only elements if control group
+        document.querySelectorAll('.adaptive-only').forEach(el => {
+            el.style.display = (isAdaptiveSession) ? 'block' : 'none';
+        });
+
+        // Re-load history when landing on the summary page
+        if (stage === 'summary') {
+            loadSessionHistory();
+        }
+    }
+
+    /**
+     * Logs an event to the sidebar log window and to the session log array.
+     */
+    function logAdaptation(message, color = 'text-gray-500', intervention = 'Stable', improvement = null) {
+        const now = Date.now();
+        const abRatio = alphaPower / betaPower;
+        
+        // Log to session array for data saving
+        const logEntry = { 
+            timestamp: new Date().toISOString(), 
+            ratio: abRatio.toFixed(2),
+            intervention: intervention,
+            improvement: improvement !== null ? improvement.toFixed(2) : null
+        };
+        sessionLog.push(logEntry);
+
+        if (intervention === 'Intervention Start') {
+            interventionCount++;
+        }
+
+        // Debounce log entries for display only
+        if (now - lastLogTime < LOG_COOLDOWN_MS) return; 
+
+        const li = document.createElement('li');
+        li.className = color;
+        li.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+        
+        // Prepend the new log item
+        if (logList.firstChild) {
+            logList.insertBefore(li, logList.firstChild);
+        } else {
+            logList.appendChild(li);
+        }
+
+        // Limit log size
+        while (logList.children.length > 8) {
+            logList.removeChild(logList.lastChild);
+        }
+        lastLogTime = now;
+    }
+
+
+    // --- Core EEG and Adaptive Logic ---
+
+    /**
+     * Simulates a random walk for Alpha and Beta brainwave powers.
+     */
+    function simulateBrainwaves() {
+        const variance = 0.2;
+        alphaPower += (Math.random() - 0.5) * variance; 
+        betaPower += (Math.random() - 0.5) * variance; 
+
+        // Keep values within a reasonable range (e.g., 0.5 to 3.5)
+        alphaPower = Math.max(0.5, Math.min(3.5, alphaPower));
+        betaPower = Math.max(0.5, Math.min(3.5, betaPower));
+    }
+
+    /**
+     * Main function to update all metrics and apply adaptive changes.
+     */
+    function updateInterface() {
+        // 1. Simulate data stream
+        simulateBrainwaves();
+
+        // 2. Calculate A/B Ratio (Focus Indicator: Lower is better focus)
+        const abRatio = alphaPower / betaPower;
+        abRatioHistory.push(abRatio); // Record for average calculation
+
+        // 3. Display Metrics
+        alphaEl.textContent = alphaPower.toFixed(2);
+        betaEl.textContent = betaPower.toFixed(2);
+        ratioEl.textContent = abRatio.toFixed(2);
+
+        // 4. Apply Adaptive Logic (If in Adaptive Mode AND on Reading Page)
+        let focusLevel = 'focus-good';
+        let feedback = 'Good Focus Maintained';
+        let feedbackColor = 'text-teal-300';
+
+        if (abRatio >= BAD_FOCUS_THRESHOLD) {
+            // BAD FOCUS (Intervention required or active)
+            focusLevel = 'focus-bad';
+            feedback = 'Bad Focus Detected - Intervening.';
+            feedbackColor = 'text-red-400';
+
+            if (isAdaptiveSession && currentStage === 'reading') {
+                if (!visualizationBox.classList.contains('focus-bad')) {
+                    // Intervention starts here
+                    preInterventionRatio = abRatio; // Record ratio when focus is lost
+                    logAdaptation(`Intervention initiated (A/B: ${abRatio.toFixed(2)}).`, 'text-red-400', 'Intervention Start');
+                }
+            }
+        } else {
+            // GOOD FOCUS (Focus regained or maintained)
+            focusLevel = 'focus-good';
+            feedback = 'Good Focus Maintained';
+            feedbackColor = 'text-teal-300';
+            
+            if (isAdaptiveSession && currentStage === 'reading') {
+                if (preInterventionRatio !== null && visualizationBox.classList.contains('focus-bad')) {
+                    // Intervention ends here (focus improved)
+                    const improvement = preInterventionRatio - abRatio;
+                    logAdaptation(`Focus regained (Improvement: ${improvement.toFixed(2)}).`, 'text-green-400', 'Intervention End', improvement);
+                    preInterventionRatio = null;
+                } else {
+                    logAdaptation("Stable concentration maintained (A/B < 1.0).", 'text-gray-500', 'Stable');
+                }
+            }
+        }
+
+        // 5. Apply CSS classes to the visualization box
+        if (currentStage === 'reading') {
+            visualizationBox.classList.remove('focus-good', 'focus-bad');
+            
+            if (isAdaptiveSession) {
+                visualizationBox.classList.add(focusLevel);
+            } else {
+                // Control group always stays in the visual 'Good Focus' state, but updates feedback text
+                visualizationBox.classList.add('focus-good'); 
+                feedback = 'Control Group Active';
+                feedbackColor = 'text-blue-300';
+            }
+        }
+        
+        // Update feedback text
+        feedbackTextEl.className = feedbackTextEl.className.replace(/text-\w+-\d+/, feedbackColor);
+        feedbackTextEl.textContent = feedback;
+    }
+
+
+    // --- Stage Control Functions ---
+
+    function startReading(isAdaptive) {
+        isAdaptiveSession = isAdaptive;
+        sessionLog = [];
+        abRatioHistory = []; // Reset history
+        lastLogTime = 0;
+        interventionCount = 0;
+        preInterventionRatio = null;
+        logList.innerHTML = '';
+        
+        readingPassageEl.className = '';
+
+        sessionTypeDisplayEl.textContent = isAdaptive ? "Adaptive Interface" : "Control Group";
+        currentSessionTypeEl.textContent = isAdaptive ? "Adaptive" : "Control";
+        
+        switchStage('reading');
+        
+        alphaPower = 0.9; 
+        betaPower = 1.0;
+        
+        logAdaptation("Reading session started. Initiating EEG simulation stream.", 'text-green-500', 'Session Start');
+        
+        eegSimulationInterval = setInterval(updateInterface, UPDATE_INTERVAL_MS);
+    }
+
+    function endReading() {
+        if (eegSimulationInterval) {
+            clearInterval(eegSimulationInterval);
+        }
+        logAdaptation("Reading passage complete. Stopping EEG simulation.", 'text-gray-500', 'Reading End');
+        
+        switchStage('encoding');
+    }
+    
+    // --- Recognition Encoding Logic (Phase 1) ---
+
+    async function startRecognitionEncoding() {
+        startEncodingButton.disabled = true;
+        
+        for (let i = 0; i < SEEN_ITEM_IDS.length; i++) {
+            const itemId = SEEN_ITEM_IDS[i];
+            const item = ALL_ITEMS_MASTER.find(it => it.id === itemId);
+            
+            encodingDisplayEl.innerHTML = `${item.emoji} ${item.word}`;
+            encodingDisplayEl.classList.add('text-white');
+            encodingDisplayEl.classList.remove('text-teal-400');
+
+            await new Promise(resolve => setTimeout(resolve, ENCODING_ITEM_DURATION_MS));
+        }
+
+        encodingDisplayEl.textContent = "DONE! Time for the quiz.";
+        encodingDisplayEl.classList.add('text-teal-400');
+        encodingDisplayEl.classList.remove('text-white');
+
+        // Transition to Quiz after a short pause
+        setTimeout(() => switchStage('comprehension'), 1500);
+    }
+
+
+    function checkAnswers() {
+        const quizForm = document.getElementById('comprehension-quiz');
+        let score = 0;
+        const totalQuestions = Object.keys(CORRECT_ANSWERS).length;
+        
+        // Reset styles first
+        Array.from(document.querySelectorAll('#comprehension-quiz > div')).forEach(div => {
+            div.classList.remove('bg-green-800/30', 'border-green-500', 'bg-red-800/30', 'border-red-500');
+            div.classList.add('bg-gray-800');
+            div.style.border = 'none';
+        });
+
+
+        for (const [qKey, correctAns] of Object.entries(CORRECT_ANSWERS)) {
+            const selected = quizForm.querySelector(`input[name="${qKey}"]:checked`);
+            const questionDiv = document.querySelector(`input[name="${qKey}"]`).closest('div');
+            
+            if (selected && selected.value === correctAns) {
+                score++;
+                questionDiv.classList.remove('bg-gray-800');
+                questionDiv.classList.add('bg-green-800/30');
+                questionDiv.style.border = '2px solid #34d399'; // Tailwind green-500
+            } else if (selected) {
+                questionDiv.classList.remove('bg-gray-800');
+                questionDiv.classList.add('bg-red-800/30');
+                questionDiv.style.border = '2px solid #f87171'; // Tailwind red-500
+            }
+        }
+
+        finalQuizScore = score;
+        finalScoreEl.textContent = score;
+        const percent = (score / totalQuestions) * 100;
+        progressBarEl.style.width = `${percent}%`;
+
+        quizResultsEl.classList.remove('hidden');
+        
+        // Disable quiz after submission
+        Array.from(quizForm.elements).forEach(el => el.disabled = true);
+    }
+
+    function startMemoryTest() {
+        switchStage('memory');
+        // Reset Memory Task
+        finalMemoryScore = 0;
+        currentMemoryLevel = 1;
+        memoryScoreEl.textContent = finalMemoryScore;
+        memoryLevelEl.textContent = currentMemoryLevel;
+        nextMemoryButton.textContent = "Begin Next Sequence";
+        nextMemoryButton.disabled = false;
+        memoryGrid.removeEventListener('click', handlePlayerInput);
+        memoryGrid.style.pointerEvents = 'none';
+        
+        // Start the first sequence automatically
+        setTimeout(playNextSequence, 500); 
+    }
+    
+    // --- Memory Task Logic (Spatial Sequence Recall) ---
+    
+    function generateSequence(length) {
+        const newSequence = [];
+        const maxIndex = 8;
+        for (let i = 0; i < length; i++) {
+            newSequence.push(Math.floor(Math.random() * (maxIndex + 1))); 
+        }
+        return newSequence;
+    }
+
+    async function flashSequence() {
+        isFlashing = true;
+        isListening = false;
+        memoryStatusEl.textContent = "WATCH THE SEQUENCE!";
+        nextMemoryButton.disabled = true;
+        
+        memorySequence = generateSequence(currentMemoryLevel);
+        playerInputSequence = [];
+
+        await new Promise(resolve => setTimeout(resolve, 1000)); 
+        
+        for (const index of memorySequence) {
+            const square = memoryGrid.querySelector(`[data-index="${index}"]`);
+            square.classList.add('active');
+            await new Promise(resolve => setTimeout(resolve, 400)); 
+            square.classList.remove('active');
+            await new Promise(resolve => setTimeout(resolve, 200));
+        }
+        
+        isFlashing = false;
+        startListening();
+    }
+    
+    function startListening() {
+        isListening = true;
+        memoryStatusEl.textContent = "NOW REPEAT THE SEQUENCE!";
+        memoryGrid.style.pointerEvents = 'auto'; // Enable clicks
+        memoryGrid.addEventListener('click', handlePlayerInput);
+    }
+    
+    function stopListening() {
+        isListening = false;
+        memoryGrid.style.pointerEvents = 'none'; // Disable clicks
+        memoryGrid.removeEventListener('click', handlePlayerInput);
+    }
+
+    async function handlePlayerInput(event) {
+        if (!isListening) return;
+
+        const square = event.target.closest('.memory-square');
+        if (!square) return;
+
+        const index = parseInt(square.dataset.index);
+        
+        // 1. Add player input
+        playerInputSequence.push(index);
+        
+        // Provide visual feedback for the click
+        square.style.transform = 'scale(0.9)';
+        setTimeout(() => square.style.transform = 'scale(1.0)', 100);
+
+        // 2. Check current step
+        const step = playerInputSequence.length - 1;
+        if (index === memorySequence[step]) {
+            // Correct step
+            square.classList.add('active');
+            setTimeout(() => square.classList.remove('active'), 200);
+
+            if (playerInputSequence.length === memorySequence.length) {
+                // Sequence complete and correct!
+                stopListening();
+                finalMemoryScore = currentMemoryLevel; // Update score
+                memoryScoreEl.textContent = finalMemoryScore;
+                
+                memoryStatusEl.textContent = "SUCCESS! Preparing next level...";
+                memoryStatusEl.classList.remove('text-red-400');
+                memoryStatusEl.classList.add('text-green-400');
+                
+                currentMemoryLevel++;
+                memoryLevelEl.textContent = currentMemoryLevel;
+                nextMemoryButton.textContent = "Start Level " + currentMemoryLevel;
+                nextMemoryButton.disabled = false;
+            }
+        } else {
+            // Incorrect step - sequence failed
+            stopListening();
+            
+            square.classList.add('error');
+            setTimeout(() => square.classList.remove('error'), 500);
+            
+            memoryStatusEl.textContent = "INCORRECT! Sequence Failed.";
+            memoryStatusEl.classList.remove('text-green-400');
+            memoryStatusEl.classList.add('text-red-400');
+            
+            nextMemoryButton.textContent = "Continue to Recognition Test";
+            nextMemoryButton.disabled = false;
+        }
+    }
+    
+    function playNextSequence() {
+        if (nextMemoryButton.textContent === "Continue to Recognition Test") {
+            // End the memory test and proceed to the retrieval task
+            startRecognitionRetrieval();
+            return;
+        }
+        
+        // Reset status for next round
+        memoryStatusEl.classList.remove('text-green-400');
+        memoryStatusEl.classList.add('text-red-400');
+        memoryLevelEl.textContent = currentMemoryLevel;
+        
+        flashSequence();
+    }
+
+    // --- Recognition Retrieval Logic (Phase 3) ---
+
+    function shuffleArray(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+    }
+
+    function startRecognitionRetrieval() {
+        switchStage('retrieval');
+        
+        // Shuffle the master list for display order
+        const shuffledItems = [...ALL_ITEMS_MASTER];
+        shuffleArray(shuffledItems);
+
+        recognitionGrid.innerHTML = '';
+        selectedRecognitionIds.clear();
+        selectedCountEl.textContent = selectedRecognitionIds.size;
+        submitRecognitionButton.disabled = true;
+        submitRecognitionButton.textContent = "Submit Recognition Score"; // Reset button text
+
+        shuffledItems.forEach(item => {
+            const div = document.createElement('div');
+            div.className = 'recognition-item p-3 bg-gray-800 rounded-lg border border-gray-700 text-center shadow-md';
+            div.dataset.itemId = item.id;
+            div.innerHTML = `<span class="text-2xl">${item.emoji}</span><br>${item.word}`;
+            div.addEventListener('click', handleRecognitionClick);
+            recognitionGrid.appendChild(div);
+        });
+    }
+
+    function handleRecognitionClick(event) {
+        const itemEl = event.currentTarget;
+        const itemId = parseInt(itemEl.dataset.itemId);
+
+        if (selectedRecognitionIds.has(itemId)) {
+            // Deselect
+            selectedRecognitionIds.delete(itemId);
+            itemEl.classList.remove('selected');
+        } else if (selectedRecognitionIds.size < 12) {
+            // Select
+            selectedRecognitionIds.add(itemId);
+            itemEl.classList.add('selected');
+        } else {
+            // Limit reached
+            showCustomMessage("You can only select a maximum of 12 items (the number originally seen).");
+            return;
+        }
+
+        selectedCountEl.textContent = selectedRecognitionIds.size;
+        submitRecognitionButton.disabled = selectedRecognitionIds.size !== 12;
+    }
+
+    function submitRecognitionTest() {
+        let hits = 0; // Correctly identified seen items
+        let falseAlarms = 0; // Incorrectly identified new items
+        
+        selectedRecognitionIds.forEach(id => {
+            if (SEEN_ITEM_IDS.includes(id)) {
+                hits++; // True Positive (Hit)
+            } else {
+                falseAlarms++; // False Positive (False Alarm)
+            }
+        });
+        
+        // The score is defined as Hits, as is common in memory tasks (max 12)
+        finalRecognitionHits = hits;
+        finalRecognitionFA = falseAlarms;
+
+
+        // Disable grid interaction and show results
+        Array.from(recognitionGrid.children).forEach(el => {
+            el.removeEventListener('click', handleRecognitionClick);
+            el.classList.add('pointer-events-none');
+            
+            const id = parseInt(el.dataset.itemId);
+            
+            // Highlight True Positives (Hits)
+            if (SEEN_ITEM_IDS.includes(id) && selectedRecognitionIds.has(id)) {
+                el.classList.add('bg-green-700/50', 'border-green-500');
+                el.classList.remove('bg-gray-800', 'selected');
+            } 
+            // Highlight False Alarms
+            else if (NEW_ITEM_IDS.includes(id) && selectedRecognitionIds.has(id)) {
+                 el.classList.add('bg-red-700/50', 'border-red-500');
+                 el.classList.remove('bg-gray-800', 'selected');
+            }
+            // Highlight Misses (False Negatives - Seen but not selected)
+            else if (SEEN_ITEM_IDS.includes(id) && !selectedRecognitionIds.has(id)) {
+                 el.classList.add('bg-orange-700/50', 'border-orange-500');
+                 el.classList.remove('selected');
+            }
+        });
+
+        submitRecognitionButton.textContent = `Score: Hits ${finalRecognitionHits}/12, FA ${finalRecognitionFA}/12`;
+        submitRecognitionButton.classList.remove('bg-teal-600', 'hover:bg-teal-700');
+        submitRecognitionButton.classList.add('bg-green-600');
+        
+        // Move to the summary after a short pause
+        setTimeout(showSessionSummary, 3000);
+    }
+
+
+    // --- Session Data & Storage ---
+
+    /**
+     * Saves the final session data to local storage.
+     */
+    function saveSessionData() {
+        // Calculate Average A/B Ratio
+        const avgRatio = abRatioHistory.length > 0 
+            ? abRatioHistory.reduce((a, b) => a + b, 0) / abRatioHistory.length 
+            : 0;
+
+        const sessionId = Date.now().toString();
+        const sessionData = {
+            id: sessionId,
+            type: isAdaptiveSession ? 'Adaptive' : 'Control',
+            timestamp: new Date().toLocaleString(),
+            avgABRatio: avgRatio.toFixed(3), // New
+            quizScore: finalQuizScore,
+            memoryScore: finalMemoryScore,
+            recognitionHits: finalRecognitionHits, // New
+            recognitionFalseAlarms: finalRecognitionFA, // New
+            interventionCount: isAdaptiveSession ? interventionCount : 0,
+            log: sessionLog // Save the log data for detailed analysis
+        };
+
+        let sessions = [];
+        try {
+            sessions = JSON.parse(localStorage.getItem('eeg_sessions')) || [];
+        } catch (e) {
+            console.error("Error parsing local storage data:", e);
+        }
+        
+        sessions.push(sessionData);
+        localStorage.setItem('eeg_sessions', JSON.stringify(sessions));
+
+        return sessionData;
+    }
+    
+    /**
+     * Loads and displays session history from local storage.
+     */
+    function loadSessionHistory() {
+        const historyEl = document.getElementById('past-sessions');
+        historyEl.innerHTML = '';
+        let sessions = [];
+
+        try {
+            sessions = JSON.parse(localStorage.getItem('eeg_sessions')) || [];
+        } catch (e) {
+            historyEl.innerHTML = '<p class="text-red-400">Error loading history from local storage.</p>';
+            return;
+        }
+
+        if (sessions.length === 0) {
+            historyEl.innerHTML = '<p class="text-gray-500">No previous session data found.</p>';
+            return;
+        }
+
+        // Display sessions, newest first
+        sessions.reverse().forEach(session => {
+            const typeColor = session.type === 'Adaptive' ? 'text-yellow-400' : 'text-blue-400';
+            const avgRatioDisplay = `A/B: <span class="${session.avgABRatio < 1.0 ? 'text-teal-300' : 'text-red-400'}">${session.avgABRatio}</span>`;
+            const focusDisplay = session.type === 'Adaptive' 
+                ? `<span class="text-red-400">${session.interventionCount} Int.</span>` 
+                : `<span class="text-blue-400">Control</span>`;
+
+            const sessionDiv = document.createElement('div');
+            sessionDiv.className = 'p-3 bg-gray-800 rounded-md flex flex-col md:flex-row justify-between items-start md:items-center border border-gray-700/50';
+            sessionDiv.innerHTML = `
+                <div class="mb-2 md:mb-0">
+                    <span class="font-bold text-white ${typeColor}">${session.type} Session</span> 
+                    <span class="text-gray-400 text-xs ml-2 block md:inline">(${session.timestamp.split(', ')[0]})</span>
+                </div>
+                <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold">
+                    <span class="text-teal-300">Quiz: ${session.quizScore}/3</span>
+                    <span class="text-purple-300">Memory: L${session.memoryScore}</span>
+                    <span class="text-green-300">Recog: ${session.recognitionHits}/12</span>
+                    ${avgRatioDisplay}
+                    ${focusDisplay}
+                </div>
+            `;
+            historyEl.appendChild(sessionDiv);
+        });
+    }
+
+    /**
+     * Populates the summary page and initiates data saving.
+     */
+    function showSessionSummary() {
+        // 1. Save the data first
+        const session = saveSessionData();
+        
+        // 2. Populate the summary fields
+        summaryTypeEl.textContent = session.type;
+        summaryAvgRatioEl.textContent = session.avgABRatio;
+        summaryQuizEl.textContent = `${session.quizScore} / 3`;
+        summaryMemoryEl.textContent = `Level ${session.memoryScore}`;
+        summaryRecognitionHitsEl.textContent = `${session.recognitionHits}`;
+        summaryRecognitionFAEl.textContent = `${session.recognitionFalseAlarms}`;
+        summaryRecognitionEl.textContent = `${session.recognitionHits} Hits`;
+
+        
+        const adaptiveElements = document.querySelectorAll('.adaptive-only');
+        if (session.type === 'Adaptive') {
+            summaryInterventionsEl.textContent = interventionCount;
+            adaptiveElements.forEach(el => el.style.display = 'block');
+        } else {
+            // Hide intervention count for control group
+            adaptiveElements.forEach(el => el.style.display = 'none');
+        }
+
+        // 3. Switch to the summary page (which automatically reloads history)
+        switchStage('summary');
+    }
+
+    /**
+     * Exports all session data from local storage to a CSV file.
+     * This addresses the user's request for an "Excel" file (CSV is the standard way).
+     */
+    function exportToCSV() {
+        let sessions = [];
+        try {
+            sessions = JSON.parse(localStorage.getItem('eeg_sessions')) || [];
+        } catch (e) {
+            showCustomMessage("Error: Could not parse session history for export.");
+            return;
+        }
+
+        if (sessions.length === 0) {
+             showCustomMessage("No session data found to export.");
+             return;
+        }
+
+        // Define the CSV header
+        const header = [
+            "ID", "Type", "Timestamp", "Avg_AB_Ratio", "Quiz_Score", 
+            "Memory_Level", "Recognition_Hits", "Recognition_False_Alarms", 
+            "Intervention_Count", "Log_Data"
+        ];
+        
+        const rows = [header.join(',')];
+
+        // Format each session into a CSV row
+        sessions.forEach(session => {
+            // Flatten the session log data into a single string for the CSV cell
+            const logString = session.log.map(log => 
+                `[${log.timestamp}][Ratio:${log.ratio}][Event:${log.intervention}${log.improvement ? `][Improvement:${log.improvement}` : ''}]`
+            ).join(' | ');
+
+            const row = [
+                session.id,
+                session.type,
+                session.timestamp,
+                session.avgABRatio,
+                session.quizScore,
+                session.memoryScore,
+                session.recognitionHits,
+                session.recognitionFalseAlarms,
+                session.interventionCount,
+                `"${logString.replace(/"/g, '""')}"` // Enclose log in quotes and escape internal quotes
+            ].join(',');
+            rows.push(row);
+        });
+
+        const csvString = rows.join('\n');
+        const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        
+        if (link.download !== undefined) { 
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", `EEG_Session_Data_${new Date().toISOString().slice(0, 10)}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showCustomMessage("Session data successfully exported as CSV!");
+        } else {
+            // Fallback for browsers that don't support download attribute
+            showCustomMessage("Your browser does not fully support automatic file download. Please copy the data manually.");
+        }
+    }
+
+    /**
+     * Clears all session data from local storage.
+     */
+    function clearLocalData() {
+        localStorage.removeItem('eeg_sessions');
+        showCustomMessage("All past session data has been cleared from your browser's local storage.");
+        
+        // Reset button and load history
+        finishSessionButton.textContent = "Data Cleared. Start New Session";
+        finishSessionButton.classList.remove('bg-pink-600', 'hover:bg-pink-700');
+        finishSessionButton.classList.add('bg-gray-600', 'hover:bg-gray-700');
+        finishSessionButton.removeEventListener('click', clearLocalData);
+        finishSessionButton.addEventListener('click', () => switchStage('start'));
+        exportCsvButton.disabled = true;
+
+        loadSessionHistory(); 
+    }
+
+    function showCustomMessage(message) {
+        let messageBox = document.getElementById('custom-message-box');
+        if (!messageBox) {
+            messageBox = document.createElement('div');
+            messageBox.id = 'custom-message-box';
+            messageBox.className = 'fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 transition-opacity duration-300';
+            messageBox.innerHTML = `
+                <div class="bg-[#161b22] p-6 rounded-lg shadow-2xl max-w-sm w-full text-center border-t-4 border-teal-500 border border-gray-700">
+                    <p class="text-white text-lg mb-4">${message}</p>
+                    <button id="message-box-ok" class="stage-button bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-lg">
+                        OK
+                    </button>
+                </div>
+            `;
+            document.body.appendChild(messageBox);
+            document.getElementById('message-box-ok').addEventListener('click', () => {
+                messageBox.remove();
+            });
+        } else {
+            messageBox.querySelector('p').textContent = message;
+        }
+    }
+
+    // --- Initialization and Event Listener Setup ---
+    document.addEventListener('DOMContentLoaded', () => {
+        switchStage('start');
+
+        // Attach event listeners to buttons
+        document.getElementById('start-adaptive-button').addEventListener('click', () => startReading(true));
+        document.getElementById('start-control-button').addEventListener('click', () => startReading(false));
+        
+        endReadingButton.addEventListener('click', endReading);
+        
+        // New: Recognition Encoding
+        startEncodingButton.addEventListener('click', startRecognitionEncoding);
+
+        submitQuizButton.addEventListener('click', checkAnswers);
+        startMemoryButton.addEventListener('click', startMemoryTest);
+        nextMemoryButton.addEventListener('click', playNextSequence);
+        
+        // New: Recognition Retrieval
+        submitRecognitionButton.addEventListener('click', submitRecognitionTest);
+
+        finishSessionButton.addEventListener('click', clearLocalData);
+        exportCsvButton.addEventListener('click', exportToCSV); // Attach CSV export function
+    });
+</script>
+
+</body>
+</html>
+
