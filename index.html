@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>REWIRE | Neuro-Engagement Framework</title>
+    <style>
+        :root { --bg-dark: #0f172a; --card-bg: #ffffff; --primary-glow: #3b82f6; --accent-teal: #06b6d4; --danger: #ef4444; --success: #10b981; --text-main: #1e293b; --text-muted: #64748b; --tile-idle: #dfe6e9;}
+        body { font-family: sans-serif; background: var(--bg-dark); color: var(--text-main); margin: 0; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+        .container { max-width: 900px; width: 95%; background: var(--card-bg); padding: 40px; border-radius: 24px; box-shadow: 0 25px 50px rgba(0,0,0,0.5); text-align: center; }
+        #stats-bar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; background: #1e293b; color: white; padding: 20px; border-radius: 16px; margin-bottom: 25px; }
+        .stat-box .value { font-size: 1.8rem; font-weight: 800; color: #3b82f6; }
+        .stat-box .label { font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; }
+        .reading-area { text-align: left; line-height: 1.8; font-size: 1.2rem; padding: 30px; border-radius: 16px; background: #f8fafc; border: 1px solid #e2e8f0; max-height: 400px; overflow-y: auto; }
+        .intervention-active { background: #fff1f2 !important; border: 2px solid var(--danger) !important; filter: blur(0.5px); }
+        .btn { padding: 15px 40px; border-radius: 50px; border: none; cursor: pointer; background: var(--primary-glow); color: white; font-weight: 800; text-transform: uppercase; transition: 0.3s; }
+        .hidden { display: none !important; }
+        #game-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; width: 320px; margin: 20px auto; }
+        .tile { height: 90px; background: var(--tile-idle); border-radius: 16px; cursor: pointer; transition: 0.15s; border: 3px solid transparent; }
+        .tile.active { background: var(--primary-glow); transform: scale(1.08); }
+        .tile.correct { background: var(--success); }
+        .tile.wrong { background: var(--danger); }
+        #level-up-pop { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--success); color: white; padding: 20px 40px; border-radius: 20px; font-size: 2rem; font-weight: 900; z-index: 10001; display: none; }
+    </style>
+</head>
+<body>
+    <div id="visual-alert" style="position:fixed;top:0;left:0;width:100%;height:100%;border:20px solid var(--danger);opacity:0;pointer-events:none;z-index:9999;"></div>
+    <div id="level-up-pop">LEVEL UP!</div>
+
+    <div class="container">
+        <h1 style="font-size: 4rem; font-weight: 900; background: linear-gradient(to right, var(--primary-glow), var(--accent-teal)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin: 0;">REWIRE</h1>
+        <p style="text-transform:uppercase; font-weight:bold; color:var(--text-muted); font-size:0.8rem; margin-bottom:30px;">Real-time Evaluation of Waves for Intervention-based Reinforcement Engagement</p>
+
+        <div id="metrics-display" class="hidden">
+            <div id="stats-bar">
+                <div class="stat-box"><span class="label">Focus Score</span><span id="val-focus" class="value">0.00</span></div>
+                <div class="stat-box"><span class="label">Threshold</span><span id="val-thresh" class="value">0.00</span></div>
+                <div class="stat-box"><span class="label">Interventions</span><span id="val-int" class="value" style="color:var(--danger)">0</span></div>
+            </div>
+        </div>
+
+        <div id="screen-entry">
+            <div style="background: #f1f5f9; padding: 40px; border-radius: 20px;">
+                <div style="margin-bottom: 15px;">
+                    <input type="text" id="uid" placeholder="PARTICIPANT ID" style="padding:16px; border-radius:12px; border:2px solid #e2e8f0; width:220px;">
+                    <select id="group-id" style="padding:16px; border-radius:12px; border:2px solid #e2e8f0; margin-left:10px;">
+                        <option value="test">Test Group (Active)</option>
+                        <option value="control">Control Group (Silent)</option>
+                    </select>
+                </div>
+                <select id="sid" style="padding:16px; border-radius:12px; border:2px solid #e2e8f0; width: 100%; max-width: 465px;">
+                    <option value="1">Session 1: Oral Foundations</option>
+                    <option value="2">Session 2: Printing Press</option>
+                    <option value="3">Session 3: Telegraph Age</option>
+                    <option value="4">Session 4: Social Algorithms</option>
+                    <option value="5">Session 5: AI Future</option>
+                </select>
+                <div style="margin-top:25px;"><button class="btn" onclick="login()">Initialize System</button></div>
+            </div>
+        </div>
+
+        <div id="screen-calib" class="hidden">
+            <h2>NEURAL BASELINE CALIBRATION</h2>
+            <div class="reading-area">"The study of human communication requires a deep understanding of how various mediums shape the cognitive processing of information. Historically, the transition from oral traditions to written scripts represented a massive shift in how collective memory was stored and retrieved. In oral societies, the burden of data retention fell entirely on the biological brain, requiring sophisticated mnemonic devices, rhythmic structures, and melodic frameworks to ensure accuracy over generations. With the advent of the printing press, this cognitive load was externalized, allowing for a democratization of knowledge but also fundamentally altering the nature of human attention. As you read this passage, the REWIRE system is currently sampling your neural oscillations to establish a baseline of your focused state. Please continue to read at a steady pace, maintaining your focus on the meaning of the sentences. The system requires this full thirty-second window to capture enough data points for a statistically significant threshold."</div>
+            <br><button class="btn" id="start-btn" onclick="startCalib()">I AM READY - START</button>
+            <h3 id="timer" style="color: var(--primary-glow); margin-top: 15px;">Waiting...</h3>
+            <button id="finalize-btn" class="btn hidden" onclick="endCalib()">Finalize & View Passage</button>
+        </div>
+
+        <div id="screen-read" class="hidden">
+            <h2 id="read-title" style="text-align:left; color:var(--primary-glow)"></h2>
+            <div id="read-box" class="reading-area"></div>
+            <br><button class="btn" onclick="finishRead()">Finished Reading</button>
+        </div>
+
+        <div id="screen-game" class="hidden">
+            <h2 style="color:var(--primary-glow); margin-bottom: 10px;">Spatial Sequence Task</h2>
+            <div style="display:flex; justify-content:space-around; background:#1e293b; color:white; padding:15px; border-radius:16px; margin-bottom:20px;">
+                <div><small>SCORE</small><div id="m-score" style="font-size:1.5rem; color:var(--primary-glow);">0</div></div>
+                <div><small>ERRORS</small><div id="m-errors" style="font-size:1.5rem; color:var(--danger);">0</div></div>
+                <div><small>LEVEL</small><div id="m-level" style="font-size:1.5rem; color:var(--accent-teal);">2 Steps</div></div>
+                <div><small>ROUND</small><div id="m-round" style="font-size:1.5rem; color:var(--success);">0/3</div></div>
+            </div>
+            <div id="game-timer" style="font-weight: bold; margin-bottom: 10px;">Time Left: 120s</div>
+            <div id="game-grid"></div>
+            <button id="btn-start-pattern" class="btn" onclick="runPattern()">Show Pattern</button>
+        </div>
+
+        <div id="screen-quiz" class="hidden">
+            <h2>COMPREHENSION QUIZ</h2>
+            <form id="q-form" style="text-align:left; max-width:600px; margin:0 auto;"></form>
+            <br><button class="btn" onclick="saveAll()">Submit & Finalize</button>
+        </div>
+    </div>
+
+    <script>
+        let u, s, group, iv, userData, rStartTime;
+        let gameData = { level: 2, roundsAtLevel: 0, score: 0, errors: 0, timeLeft: 120, sequence: [], userEntry: [], isDisplaying: false };
+        let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        function navigate(id) {
+            ['screen-entry','screen-calib','screen-read','screen-game','screen-quiz'].forEach(x => document.getElementById(x).classList.add('hidden'));
+            document.getElementById(id).classList.remove('hidden');
+        }
+
+        async function login() {
+            u=document.getElementById('uid').value; 
+            s=document.getElementById('sid').value;
+            group=document.getElementById('group-id').value;
+            if(!u || !s) return alert("Missing ID");
+            const resp = await fetch('/get_session_content/'+s);
+            userData = await resp.json();
+            document.getElementById('read-title').innerText = userData.title;
+            document.getElementById('read-box').innerText = userData.passage;
+            let qh = ""; 
+            userData.questions.forEach((q,i)=>{
+                qh+=`<div style="margin-bottom:15px;"><p><b>${i+1}. ${q.q}</b></p>`;
+                q.options.forEach((o,oi)=> qh+=`<label style="display:block;"><input type="radio" name="q${i}" value="${oi}"> ${o}</label>`);
+                qh+=`</div>`;
+            });
+            document.getElementById('q-form').innerHTML = qh;
+            navigate('screen-calib');
+        }
+
+        function startCalib() {
+            document.getElementById('start-btn').classList.add('hidden');
+            fetch('/start_calibration', {method:'POST'});
+            let tl=30; 
+            let timerI = setInterval(() => {
+                tl--; document.getElementById('timer').innerText = `Calibrating: ${tl}s`;
+                if(tl<=0){ 
+                    clearInterval(timerI); document.getElementById('timer').innerText = "DONE";
+                    fetch('/end_calibration',{method:'POST'}).then(r=>r.json()).then(d=>{
+                        document.getElementById('val-thresh').innerText = d.threshold.toFixed(2);
+                        document.getElementById('finalize-btn').classList.remove('hidden');
+                    });
+                }
+            }, 1000);
+        }
+
+        function endCalib() {
+            navigate('screen-read'); 
+            document.getElementById('metrics-display').classList.remove('hidden');
+            rStartTime = Date.now();
+            fetch('/start_reading', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({group: group})
+            }); 
+            iv=setInterval(update, 1000);
+        }
+
+        async function update() {
+            const r = await fetch('/get_status'); const d = await r.json();
+            document.getElementById('val-focus').innerText = d.focus.toFixed(2);
+            document.getElementById('val-thresh').innerText = d.threshold.toFixed(2);
+            document.getElementById('val-int').innerText = d.intervention_count;
+            let rb = document.getElementById('read-box');
+            
+            // Apply interventions ONLY if in Test Group
+            if(group === 'test') {
+                if(d.intervene) { 
+                    rb.classList.add('intervention-active'); 
+                    document.getElementById('visual-alert').style.opacity="0.5"; 
+                }
+                else { 
+                    rb.classList.remove('intervention-active'); 
+                    document.getElementById('visual-alert').style.opacity="0"; 
+                }
+                if(d.play_audio) { 
+                    let o=audioCtx.createOscillator(); 
+                    o.connect(audioCtx.destination); 
+                    o.start(); 
+                    setTimeout(()=>o.stop(),300); 
+                }
+            } else {
+                // Control Group - ensure UI remains clean
+                rb.classList.remove('intervention-active');
+                document.getElementById('visual-alert').style.opacity="0";
+            }
+        }
+
+        function finishRead() { 
+            clearInterval(iv); 
+            userData.readSec = Math.floor((Date.now() - rStartTime) / 1000);
+            document.getElementById('metrics-display').classList.add('hidden'); 
+            navigate('screen-game'); 
+            initGame(); 
+        }
+
+        function initGame() {
+            const grid = document.getElementById('game-grid'); grid.innerHTML = '';
+            for(let i=0; i<9; i++) {
+                let t = document.createElement('div'); t.className = 'tile';
+                t.onclick = () => handleTile(i); grid.appendChild(t);
+            }
+            let gt = setInterval(() => {
+                gameData.timeLeft--; document.getElementById('game-timer').innerText = `Time Left: ${gameData.timeLeft}s`;
+                if(gameData.timeLeft <= 0){ clearInterval(gt); navigate('screen-quiz'); }
+            }, 1000);
+        }
+
+        async function runPattern() {
+            if(gameData.isDisplaying) return; gameData.isDisplaying=true; gameData.userEntry=[];
+            document.getElementById('btn-start-pattern').style.visibility = 'hidden';
+            gameData.sequence = Array.from({length: gameData.level}, () => Math.floor(Math.random()*9));
+            for(let id of gameData.sequence) {
+                await new Promise(r=>setTimeout(r,600)); document.querySelectorAll('.tile')[id].classList.add('active');
+                await new Promise(r=>setTimeout(r,600)); document.querySelectorAll('.tile')[id].classList.remove('active');
+            }
+            gameData.isDisplaying=false;
+        }
+
+        function handleTile(id) {
+            if(gameData.isDisplaying || gameData.sequence.length===0) return;
+            gameData.userEntry.push(id); const tiles = document.querySelectorAll('.tile');
+            if(id === gameData.sequence[gameData.userEntry.length - 1]) {
+                gameData.score += 10; tiles[id].classList.add('correct'); setTimeout(()=>tiles[id].classList.remove('correct'),300);
+                if(gameData.userEntry.length === gameData.sequence.length) {
+                    gameData.roundsAtLevel++;
+                    if(gameData.roundsAtLevel >= 3) { 
+                        gameData.score += 100; gameData.level++; gameData.roundsAtLevel = 0; 
+                        document.getElementById('level-up-pop').style.display = 'block';
+                        setTimeout(() => document.getElementById('level-up-pop').style.display = 'none', 1500);
+                    }
+                    updateGameUI(); gameData.sequence = []; document.getElementById('btn-start-pattern').style.visibility = 'visible';
+                }
+            } else {
+                gameData.errors++; tiles[id].classList.add('wrong'); setTimeout(()=>tiles[id].classList.remove('wrong'),500);
+                updateGameUI(); gameData.sequence = []; document.getElementById('btn-start-pattern').style.visibility = 'visible';
+            }
+        }
+
+        function updateGameUI() {
+            document.getElementById('m-score').innerText = gameData.score;
+            document.getElementById('m-errors').innerText = gameData.errors;
+            document.getElementById('m-level').innerText = `${gameData.level} Steps`;
+            document.getElementById('m-round').innerText = `${gameData.roundsAtLevel}/3`;
+        }
+
+        async function saveAll() {
+            let qs=0; const form=document.getElementById('q-form');
+            userData.questions.forEach((q,i)=>{
+                const sel = form.querySelector(`input[name="q${i}"]:checked`);
+                if(sel && parseInt(sel.value) === q.correct) qs++;
+            });
+            const p = { 
+                user_id:u, 
+                session_id:s, 
+                group: group,
+                reading_duration:userData.readSec, 
+                quiz_score:qs, 
+                memory_score:gameData.score, 
+                memory_errors:gameData.errors 
+            };
+            await fetch('/save_session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});
+            alert("Session Data Saved!"); location.reload();
+        }
+    </script>
+</body>
+</html>
